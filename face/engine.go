@@ -2,7 +2,9 @@ package face
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/rekognition"
@@ -39,7 +41,13 @@ func (r *rekognitionFaceIndexer) createCollectionIfNotExists(ctx context.Context
 			CollectionId: aws.String(collectionId),
 		})
 		if err != nil {
-			return fmt.Errorf("failed to create collection: %v", err)
+			var rae *types.ResourceAlreadyExistsException
+			if errors.As(err, &rae) {
+				log.Printf("Collection %s already exists, skip error while failed create it.\n", collectionId)
+				return nil
+			} else {
+				return fmt.Errorf("eror is not ResourceAlreadyExistsException failed to create collection: %v", err)
+			}
 		}
 		fmt.Printf("Collection %s created successfully.\n", collectionId)
 	}
