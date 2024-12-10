@@ -9,12 +9,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/rekognition"
 	"github.com/aws/aws-sdk-go-v2/service/rekognition/types"
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 )
 
 type Face interface {
 	IndexFace(ctx context.Context, image []byte, imageID string, eventID string) error
-	SearchFace(ctx context.Context, imageSelfie []byte, eventID string) ([]string, error)
+	SearchAndIndexSelfieFace(ctx context.Context, imageSelfie []byte, eventID string) (string, []string, error)
+	SearchFacebyFaceId(ctx context.Context, imageSelfieId string, eventID string) ([]string, error)
 	IndexFaceWithBucket(ctx context.Context, s3Bucket string, s3Key string, imageID string, eventID string) error
 	SearchFaceWithBucket(ctx context.Context, s3Bucket string, s3Key string, collectionId string) ([]string, error)
 }
@@ -87,31 +89,37 @@ func (r *rekognitionFaceIndexer) IndexFace(ctx context.Context, imageBytes []byt
 }
 
 // SearchFace Implementation of SearchFace method in Face interface
-func (r *rekognitionFaceIndexer) SearchFace(ctx context.Context, imageSelfie []byte, collectionId string) ([]string, error) {
-	// Prepare the input for the SearchFacesByImage API
-	input := &rekognition.SearchFacesByImageInput{
-		CollectionId: aws.String(collectionId),
-		Image:        &types.Image{Bytes: imageSelfie},
-	}
+func (r *rekognitionFaceIndexer) SearchAndIndexSelfieFace(ctx context.Context, imageSelfie []byte, collectionId string) (string, []string, error) {
 
-	// Call the SearchFacesByImage API
-	resp, err := r.client.SearchFacesByImage(ctx, input)
+	// Generate a random UUID as ExternalImageId
+	externalImageId := fmt.Sprintf("%s_%s", uuid.New().String(), collectionId)
+
+	// Index the input selfie
+	inputIndexSelfie := &rekognition.IndexFacesInput{
+		CollectionId:    aws.String(collectionId),
+		Image:           &types.Image{Bytes: imageSelfie},
+		ExternalImageId: aws.String(externalImageId),
+	}
+	// Call the IndexFaces API
+	resp, err := r.client.IndexFaces(ctx, inputIndexSelfie)
 	if err != nil {
-		return nil, fmt.Errorf("failed to search face by image: %v", err)
+		return "", nil, fmt.Errorf("search face failed: error when try to index selfie face: %v", err)
 	}
 
-	// Use a map to ensure uniqueness of ExternalImageId
-	var externalImageIds []string
-	for _, match := range resp.FaceMatches {
-		if match.Face.ExternalImageId != nil {
-			externalImageIds = append(externalImageIds, *match.Face.ExternalImageId)
-		}
+	// Check if a face was detected and indexed
+	if len(resp.FaceRecords) == 0 {
+		return "", nil, fmt.Errorf("search face failed: no face detected in the image")
 	}
 
-	// Use lo.Uniq to filter out duplicate ExternalImageIds
-	uniqueExternalImageIds := lo.Uniq(externalImageIds)
+	// Get the FaceId of the first indexed face
+	faceId := *resp.FaceRecords[0].Face.FaceId
+	fmt.Printf("Successfully Indexed FaceId: %s, ExternalImageId: %s\n", faceId, externalImageId)
 
-	return uniqueExternalImageIds, nil
+	externalImageIdResult, err := r.SearchFacebyFaceId(ctx, faceId, collectionId)
+	if err != nil {
+		return "", nil, fmt.Errorf("search Face Failed: error when try to find selfie in collection: %v", err)
+	}
+	return faceId, externalImageIdResult, nil
 }
 
 // IndexFaceWithBucket Implementation of IndexFace method for S3 image input
@@ -171,6 +179,40 @@ func (r *rekognitionFaceIndexer) SearchFaceWithBucket(ctx context.Context, s3Buc
 	// Use a slice to store ExternalImageIds
 	var externalImageIds []string
 
+	for _, match := range resp.FaceMatches {
+		if match.Face.ExternalImageId != nil {
+			externalImageIds = append(externalImageIds, *match.Face.ExternalImageId)
+		}
+	}
+
+	// Use lo.Uniq to filter out duplicate ExternalImageIds
+	uniqueExternalImageIds := lo.Uniq(externalImageIds)
+
+	return uniqueExternalImageIds, nil
+}
+
+func (r *rekognitionFaceIndexer) SearchFacebyFaceId(ctx context.Context, imageSelfieId string, collectionId string) ([]string, error) {
+	// Prepare the input for the SearchFacesByImage API
+	input := &rekognition.SearchFacesInput{
+		CollectionId: aws.String(collectionId),  // The collection where the face is stored
+		FaceId:       aws.String(imageSelfieId), // The FaceId we want to search for
+	}
+
+	// Call the SearchFacesByImage API
+	resp, err := r.client.SearchFaces(ctx, input)
+	if err != nil {
+		// Check if the error is an InvalidParameterException (no faces in the image)
+		var invalidParamErr *types.InvalidParameterException
+		if errors.As(err, &invalidParamErr) {
+			// Handle the case where no faces were detected in the image
+			log.Printf("Search Face Error: Invalid Parameter and No Face Found")
+			return nil, fmt.Errorf("no faces detected in the image: %v", err)
+		}
+		return nil, fmt.Errorf("failed to search face by id, [Invalid, please try again]: %v", err)
+	}
+
+	// Use a map to ensure uniqueness of ExternalImageId
+	var externalImageIds []string
 	for _, match := range resp.FaceMatches {
 		if match.Face.ExternalImageId != nil {
 			externalImageIds = append(externalImageIds, *match.Face.ExternalImageId)
