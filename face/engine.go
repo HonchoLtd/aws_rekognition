@@ -197,7 +197,8 @@ func (r *rekognitionFaceIndexer) SearchFacebyFaceId(ctx context.Context, imageSe
 		CollectionId: aws.String(collectionId),  // The collection where the face is stored
 		FaceId:       aws.String(imageSelfieId), // The FaceId we want to search for
 	}
-
+	log.Printf("Try to find this face id: %s", imageSelfieId)
+	log.Printf("Try to find this collection id: %s", collectionId)
 	// Call the SearchFacesByImage API
 	resp, err := r.client.SearchFaces(ctx, input)
 	if err != nil {
