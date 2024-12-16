@@ -206,8 +206,8 @@ func (r *rekognitionFaceIndexer) SearchFacebyFaceId(ctx context.Context, imageSe
 		var invalidParamErr *types.InvalidParameterException
 		if errors.As(err, &invalidParamErr) {
 			// Handle the case where no faces were detected in the image
-			log.Printf("Search Face Error: Invalid Parameter and No Face Found")
-			return nil, fmt.Errorf("no faces detected in the image: %v", err)
+			log.Printf("Search Face Error: Invalid Parameter")
+			return nil, fmt.Errorf("found this error when search face by id: %v", err)
 		}
 		return nil, fmt.Errorf("failed to search face by id, [Invalid, please try again]: %v", err)
 	}

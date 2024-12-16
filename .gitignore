@@ -262,6 +262,6 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/intellij+all,go,windows,linux,macos,visualstudiocode,goland+all
 
-engine_test.go
+# engine_test.go
 photo_0-0.jpeg
 seflie_sample.jpeg
