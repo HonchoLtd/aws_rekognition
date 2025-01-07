@@ -2,6 +2,7 @@ package face
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -201,9 +202,32 @@ func (r *rekognitionFaceIndexer) SearchFacebyFaceId(ctx context.Context, imageSe
 	log.Printf("Try to find this dummy face id: %s", imageFaceId)
 	log.Printf("Try to find this generated face id: %s", imageSelfieId)
 	log.Printf("Try to find this collection id: %s", collectionId)
+	// Try to find the collection exists or not
+	inputCheckCollection := &rekognition.DescribeCollectionInput{
+		CollectionId: aws.String(*input.CollectionId),
+	}
+	resp_collection, err := r.client.DescribeCollection(ctx, inputCheckCollection)
+	if err != nil {
+		log.Printf("Error collection : %v", err)
+	}
+	json_resp_col, _ := json.Marshal(resp_collection)
+	log.Printf("Try to check this collection : %s", string(json_resp_col))
+	log.Printf("Input payload: %s %s", *input.CollectionId, *input.FaceId)
+
+	// Try to list all the faces in collection
+	inputListFacesCollection := &rekognition.ListFacesInput{
+		CollectionId: aws.String(*input.CollectionId),
+	}
+	resp_list_faces, err := r.client.ListFaces(ctx, inputListFacesCollection)
+	if err != nil {
+		log.Printf("Error List Faces : %v", err)
+	}
+	json_resp_list_faces, _ := json.Marshal(resp_list_faces)
+	log.Printf("Try to list all faces collection : %s", string(json_resp_list_faces))
+
+	log.Printf("Input payload: %s %s", *input.CollectionId, *input.FaceId)
 	// Call the SearchFacesByImage API
 	resp, err := r.client.SearchFaces(ctx, input)
-	log.Printf("Input payload: %s %s", *input.CollectionId, *input.FaceId)
 	if err != nil {
 		log.Printf("error line: %v", err)
 		// Check if the error is an InvalidParameterException (no faces in the image)
