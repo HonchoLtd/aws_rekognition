@@ -193,11 +193,13 @@ func (r *rekognitionFaceIndexer) SearchFaceWithBucket(ctx context.Context, s3Buc
 
 func (r *rekognitionFaceIndexer) SearchFacebyFaceId(ctx context.Context, imageSelfieId string, collectionId string) ([]string, error) {
 	// Prepare the input for the SearchFacesByImage API
+	imageFaceId := "623f715d-a5e2-4322-985d-a3591f343856" // For debugging purpose only
 	input := &rekognition.SearchFacesInput{
-		CollectionId: aws.String(collectionId),  // The collection where the face is stored
-		FaceId:       aws.String(imageSelfieId), // The FaceId we want to search for
+		CollectionId: aws.String(collectionId), // The collection where the face is stored
+		FaceId:       aws.String(imageFaceId),  // The FaceId we want to search for
 	}
-	log.Printf("Try to find this face id: %s", imageSelfieId)
+	log.Printf("Try to find this dummy face id: %s", imageFaceId)
+	log.Printf("Try to find this generated face id: %s", imageSelfieId)
 	log.Printf("Try to find this collection id: %s", collectionId)
 	// Call the SearchFacesByImage API
 	resp, err := r.client.SearchFaces(ctx, input)
