@@ -201,7 +201,9 @@ func (r *rekognitionFaceIndexer) SearchFacebyFaceId(ctx context.Context, imageSe
 	log.Printf("Try to find this collection id: %s", collectionId)
 	// Call the SearchFacesByImage API
 	resp, err := r.client.SearchFaces(ctx, input)
+	log.Printf("Input payload: %s %s", *input.CollectionId, *input.FaceId)
 	if err != nil {
+		log.Printf("error line: %v", err)
 		// Check if the error is an InvalidParameterException (no faces in the image)
 		var invalidParamErr *types.InvalidParameterException
 		if errors.As(err, &invalidParamErr) {
