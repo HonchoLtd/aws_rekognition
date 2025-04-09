@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/rekognition"
@@ -20,6 +21,8 @@ type Face interface {
 	SearchFacebyFaceId(ctx context.Context, imageSelfieId string, eventID string) ([]string, error)
 	IndexFaceWithBucket(ctx context.Context, s3Bucket string, s3Key string, imageID string, eventID string) error
 	SearchFaceWithBucket(ctx context.Context, s3Bucket string, s3Key string, collectionId string) ([]string, error)
+	DeleteFacebyFaceIds(ctx context.Context, faceIds []string, collectionId string) ([]string, error)
+	listFace(ctx context.Context, collectionId string) ([]string, error)
 }
 
 type rekognitionFaceIndexer struct {
@@ -212,16 +215,22 @@ func (r *rekognitionFaceIndexer) SearchFacebyFaceId(ctx context.Context, imageSe
 	log.Printf("Try to check this collection : %s", string(json_resp_col))
 	log.Printf("Input payload: %s %s", *input.CollectionId, *input.FaceId)
 
-	// Try to list all the faces in collection
-	inputListFacesCollection := &rekognition.ListFacesInput{
-		CollectionId: aws.String(*input.CollectionId),
-	}
-	resp_list_faces, err := r.client.ListFaces(ctx, inputListFacesCollection)
-	if err != nil {
-		log.Printf("Error List Faces : %v", err)
-	}
-	json_resp_list_faces, _ := json.Marshal(resp_list_faces)
-	log.Printf("Try to list all faces collection : %s", string(json_resp_list_faces))
+	// start := time.Now()
+	// // Try to list all the faces in collection
+	// inputListFacesCollection := &rekognition.ListFacesInput{
+	// 	CollectionId: aws.String(*input.CollectionId),
+	// }
+	// resp_list_faces, err := r.client.ListFaces(ctx, inputListFacesCollection)
+	// if err != nil {
+	// 	log.Printf("Error List Faces : %v", err)
+	// }
+	// json_resp_list_faces, _ := json.Marshal(resp_list_faces)
+	// log.Printf("Try to list all faces collection : %s", string(json_resp_list_faces))
+	// elapsed := time.Since(start)
+	// log.Printf("Binomial took %s", elapsed)
+
+	log.Printf("Delay before search faces by 3 second")
+	time.Sleep(3 * time.Second)
 
 	log.Printf("Input payload: %s %s", *input.CollectionId, *input.FaceId)
 	// Call the SearchFacesByImage API
@@ -250,4 +259,46 @@ func (r *rekognitionFaceIndexer) SearchFacebyFaceId(ctx context.Context, imageSe
 	uniqueExternalImageIds := lo.Uniq(externalImageIds)
 
 	return uniqueExternalImageIds, nil
+}
+
+func (r *rekognitionFaceIndexer) DeleteFacebyFaceIds(ctx context.Context, faceIds []string, collectionId string) ([]string, error) {
+	// Prepare the input for the DeleteFace API
+	input := &rekognition.DeleteFacesInput{
+		CollectionId: aws.String(collectionId), // The collection where the face is stored
+		FaceIds:      faceIds,                  // The FaceId we want to search for
+	}
+	// Call the SearchFacesByImage API
+	resp, err := r.client.DeleteFaces(ctx, input)
+	if err != nil {
+		log.Printf("error line: %v", err)
+		return nil, fmt.Errorf("Failed to delete faces: %v", err)
+	}
+
+	unsuccessfulFaces := make([]string, 0)
+	for _, unsuccessFace := range resp.UnsuccessfulFaceDeletions {
+		fmt.Println("FOUND FACES", unsuccessFace.FaceId)
+		unsuccessfulFaces = append(unsuccessfulFaces, *unsuccessFace.FaceId)
+		log.Printf("FaceId : %s failed to be deleted because: %s", *unsuccessFace.FaceId, *&unsuccessFace.Reasons)
+	}
+	return unsuccessfulFaces, nil
+}
+
+func (r *rekognitionFaceIndexer) listFace(ctx context.Context, collectionId string) ([]string, error) {
+	// Prepare the input for the DeleteFace API
+	input := &rekognition.ListFacesInput{
+		CollectionId: aws.String(collectionId), // The collection where the face is stored              // The FaceId we want to search for
+	}
+	// Call the SearchFacesByImage API
+	resp, err := r.client.ListFaces(ctx, input)
+	if err != nil {
+		log.Printf("error line: %v", err)
+		return nil, fmt.Errorf("Failed to delete faces: %v", err)
+	}
+
+	facesResult := make([]string, 0)
+	for _, face := range resp.Faces {
+		facesResult = append(facesResult, *face.FaceId)
+	}
+	return facesResult, nil
+
 }

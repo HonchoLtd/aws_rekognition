@@ -56,9 +56,9 @@ func TestIndexFace(t *testing.T) {
 	}
 
 	// Sample input: imageBytes, externalImageId, collectionId
-	imagePath := "tomatoes.jpg"                          // Replace with your input image path
-	externalImageId := "sample_image_id_no_face"         // Replace with your designated image id
-	collectionId := "new_event_66504ef59a3df2b11c092443" // Replace with your eventId
+	imagePath := "3persons.png"                // Replace with your input image path
+	externalImageId := "sample_3persons"       // Replace with your designated image id
+	collectionId := "675c4c8cf3bf5db0b14a04ce" // Replace with your eventId
 
 	// Read image bytes from the file
 	imageBytes, err := os.ReadFile(imagePath)
@@ -84,7 +84,8 @@ func TestSearchFace(t *testing.T) {
 	// Sample input: imageBytes, externalImageId, collectionId
 	// imagePath := "photo_0-0.jpeg"                        // Replace with your input image path
 	// collectionId := "new_event_66504ef59a3df2b11c092443" // Replace with your eventId
-	imagePath := "debug_13_12_2024.png"        // Replace with your input image path
+	// imagePath := "debug_13_12_2024.png"        // Replace with your input image path
+	imagePath := "3persons.png"
 	collectionId := "675fb388f3bf5db0b14a05cd" // Replace with your eventId
 	// Read image bytes from the file
 	imageBytes, err := os.ReadFile(imagePath)
@@ -159,8 +160,8 @@ func TestSearchFacebyFaceId(t *testing.T) {
 	}
 
 	// Sample input: imageBytes, externalImageId, collectionId
-	faceId := "e30f13d9-c395-43b4-b901-b982f7329e61"     // Replace with your input image path
-	collectionId := "new_event_66504ef59a3df2b11c092443" // Replace with your eventId
+	faceId := "f29ef5ec-37df-42dc-8bfa-cf4100b31dd6" // Replace with your input image path
+	collectionId := "675c4c8cf3bf5db0b14a04ce"       // Replace with your eventId
 
 	// Create a context
 	ctx := context.TODO()
@@ -170,4 +171,46 @@ func TestSearchFacebyFaceId(t *testing.T) {
 	}
 	fmt.Println("Face ID Of Selfie: ", faceId)
 	fmt.Println("Matched External Image IDs:", matchedExternalImageIds)
+}
+
+func TestDeleteFacebyFaceIds(t *testing.T) {
+	rekognitionClient, _ := loadAwsRekognition()
+
+	// Create an instance of RekognitionFaceIndexer
+	faceIndexer := &rekognitionFaceIndexer{
+		client: rekognitionClient,
+	}
+
+	// Sample input: imageBytes, externalImageId, collectionId
+	faceIds := []string{"98c0623c-cca1-348c-8996-ae4bfdb85420"} // Replace with your faceIds
+	collectionId := "675c4c8cf3bf5db0b14a04ce"                  // Replace with your eventId
+
+	// Create a context
+	ctx := context.TODO()
+	unsuccessfulFaces, err := faceIndexer.DeleteFacebyFaceIds(ctx, faceIds, collectionId)
+	if err != nil {
+		log.Fatalf("error deleting the faces: %v", err)
+	}
+	fmt.Println("Unsuccessfull Deleted Face Ids: ", unsuccessfulFaces)
+}
+
+func TestListFace(t *testing.T) {
+	rekognitionClient, _ := loadAwsRekognition()
+
+	// Create an instance of RekognitionFaceIndexer
+	faceIndexer := &rekognitionFaceIndexer{
+		client: rekognitionClient,
+	}
+
+	collectionId := "675c4c8cf3bf5db0b14a04ce" // Replace with your eventId
+
+	// Create a context
+	ctx := context.TODO()
+	listFaces, err := faceIndexer.listFace(ctx, collectionId)
+	if err != nil {
+		log.Fatalf("error deleting the faces: %v", err)
+	}
+	for _, faceID := range listFaces {
+		fmt.Println("FaceId:", faceID)
+	}
 }
