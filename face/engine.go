@@ -121,7 +121,7 @@ func (r *rekognitionFaceIndexer) SearchAndIndexSelfieFace(ctx context.Context, i
 
 	externalImageIdResult, err := r.SearchFacebyFaceId(ctx, faceId, collectionId)
 	if err != nil {
-		return "", nil, fmt.Errorf("search Face Failed: error when try to find selfie in collection: %v", err)
+		return faceId, nil, fmt.Errorf("search Face Failed: error when try to find selfie in collection: %v", err)
 	}
 	return faceId, externalImageIdResult, nil
 }
