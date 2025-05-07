@@ -77,6 +77,9 @@ func (r *rekognitionFaceIndexer) IndexFace(ctx context.Context, imageBytes []byt
 		ExternalImageId: aws.String(externalImageId),
 	}
 
+	log.Printf("Delay before Index faces by 3 second")
+	time.Sleep(3 * time.Second)
+
 	// Call the IndexFaces API
 	resp, err := r.client.IndexFaces(ctx, input)
 	if err != nil {
