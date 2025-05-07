@@ -77,8 +77,8 @@ func (r *rekognitionFaceIndexer) IndexFace(ctx context.Context, imageBytes []byt
 		ExternalImageId: aws.String(externalImageId),
 	}
 
-	log.Printf("Delay before Index faces by 3 second")
-	time.Sleep(3 * time.Second)
+	log.Printf("Delay before Index faces by 0.5 second")
+	time.Sleep(500 * time.Millisecond)
 
 	// Call the IndexFaces API
 	resp, err := r.client.IndexFaces(ctx, input)
@@ -97,6 +97,14 @@ func (r *rekognitionFaceIndexer) IndexFace(ctx context.Context, imageBytes []byt
 
 // SearchFace Implementation of SearchFace method in Face interface
 func (r *rekognitionFaceIndexer) SearchAndIndexSelfieFace(ctx context.Context, imageSelfie []byte, collectionId string) (string, []string, error) {
+
+	err := r.createCollectionIfNotExists(ctx, r.client, collectionId)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to ensure collection exists: %v", err)
+	}
+
+	log.Printf("Delay before Index faces by 0.5 second")
+	time.Sleep(500 * time.Millisecond)
 
 	// Generate a random UUID as ExternalImageId
 	externalImageId := fmt.Sprintf("%s_%s", uuid.New().String(), collectionId)
