@@ -86,7 +86,7 @@ func TestSearchFace(t *testing.T) {
 	// collectionId := "new_event_66504ef59a3df2b11c092443" // Replace with your eventId
 	// imagePath := "debug_13_12_2024.png"        // Replace with your input image path
 	imagePath := "3persons.png"
-	collectionId := "675fb388f3bf5db0b14a05cd" // Replace with your eventId
+	collectionId := "675fb398f4bf5db0b14a05cd" // Replace with your eventId
 	// Read image bytes from the file
 	imageBytes, err := os.ReadFile(imagePath)
 	if err != nil {
@@ -95,7 +95,7 @@ func TestSearchFace(t *testing.T) {
 
 	// Create a context
 	ctx := context.TODO()
-	faceId, matchedExternalImageIds, err := faceIndexer.SearchAndIndexSelfieFace(ctx, imageBytes, collectionId)
+	faceId, matchedExternalImageIds, croppedFaceBytes, err := faceIndexer.SearchAndIndexSelfieFace(ctx, imageBytes, collectionId)
 	log.Println(faceId)
 	log.Println(matchedExternalImageIds)
 	if err != nil {
@@ -103,6 +103,14 @@ func TestSearchFace(t *testing.T) {
 	}
 	fmt.Println("Face ID Of Selfie: ", faceId)
 	fmt.Println("Matched External Image IDs:", matchedExternalImageIds)
+	// --- Save cropped face result ---
+	outputFile := fmt.Sprintf("cropped_face_%s.jpeg", faceId)
+	err = os.WriteFile(outputFile, croppedFaceBytes, 0644)
+	if err != nil {
+		log.Fatalf("failed to save cropped face image: %v", err)
+	}
+
+	fmt.Printf("✅ Cropped face saved successfully as %s\n", outputFile)
 }
 
 func TestIndexFaceWithBucket(t *testing.T) {
