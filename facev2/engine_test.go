@@ -93,14 +93,23 @@ func TestExtractIndexedFaces(t *testing.T) {
 
 	got := extractIndexedFaces(faceRecords)
 
+	// None of these records set FaceDetail, so Pose/Quality/Occluded come
+	// back as their zero-value (perfectly frontal, zero-quality, neutral
+	// occlusion) defensive default — see toFacePose/toFaceQuality/
+	// toFaceOccluded — which nets out to a fixed Score of 60 (0.4*100 pose
+	// + 0.4*50 occl-neutral + 0.2*0 quality). See
+	// TestExtractIndexedFaces_ParsesPoseAndQuality for the real path,
+	// where FaceDetail is populated.
 	want := []IndexedFace{
 		{
 			FaceId:      faceId1,
 			BoundingBox: FaceBoundingBox{Width: 0.25, Height: 0.5, Left: 0.1, Top: 0.2},
+			Score:       60,
 		},
 		{
 			FaceId:      faceId2,
 			BoundingBox: FaceBoundingBox{Width: 0.3, Height: 0.4, Left: 0.5, Top: 0.6},
+			Score:       60,
 		},
 	}
 
@@ -108,9 +117,118 @@ func TestExtractIndexedFaces(t *testing.T) {
 		t.Fatalf("extractIndexedFaces() returned %d faces, want %d: %+v", len(got), len(want), got)
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		// Score is compared with a tolerance (see approxEqual in
+		// score_test.go): the weight constants aren't exactly representable
+		// in float32, so e.g. 0.6*100 comes back as 60.000004, not 60.
+		g, w := got[i], want[i]
+		g.Score, w.Score = 0, 0
+		if g != w || !approxEqual(got[i].Score, want[i].Score) {
 			t.Errorf("extractIndexedFaces()[%d] = %+v, want %+v", i, got[i], want[i])
 		}
+	}
+}
+
+// TestExtractIndexedFaces_ParsesFaceOccluded confirms
+// FaceRecords[].FaceDetail.FaceOccluded is extracted onto
+// IndexedFace.Occluded when present (surfaced only because IndexFace
+// requests FACE_OCCLUDED explicitly — it's NOT in AWS's DEFAULT attribute
+// set), and defaults to the zero-value when absent.
+func TestExtractIndexedFaces_ParsesFaceOccluded(t *testing.T) {
+	faceIdOccluded := "44444444-4444-4444-4444-444444444444"
+	faceIdMissing := "55555555-5555-5555-5555-555555555555"
+
+	faceRecords := []types.FaceRecord{
+		{
+			Face: &types.Face{
+				FaceId: &faceIdOccluded,
+				BoundingBox: &types.BoundingBox{
+					Width: aws32(0.2), Height: aws32(0.2), Left: aws32(0.1), Top: aws32(0.1),
+				},
+			},
+			FaceDetail: &types.FaceDetail{
+				FaceOccluded: &types.FaceOccluded{
+					Value:      true,
+					Confidence: aws32(88.4),
+				},
+			},
+		},
+		{
+			// FaceDetail present, but FaceOccluded nil (e.g. a record from an
+			// older API response, or from a call that didn't ask for the
+			// FACE_OCCLUDED attribute) — must fall back to the zero-value
+			// (not occluded, zero confidence), not panic.
+			Face: &types.Face{
+				FaceId: &faceIdMissing,
+				BoundingBox: &types.BoundingBox{
+					Width: aws32(0.2), Height: aws32(0.2), Left: aws32(0.1), Top: aws32(0.1),
+				},
+			},
+			FaceDetail: &types.FaceDetail{},
+		},
+	}
+
+	got := extractIndexedFaces(faceRecords)
+	if len(got) != 2 {
+		t.Fatalf("extractIndexedFaces() returned %d faces, want 2: %+v", len(got), got)
+	}
+	if got[0].Occluded != (FaceOccluded{Value: true, Confidence: 88.4}) {
+		t.Errorf("Occluded[0] = %+v, want {true, 88.4}", got[0].Occluded)
+	}
+	if got[1].Occluded != (FaceOccluded{}) {
+		t.Errorf("Occluded[1] = %+v, want zero-value (nil FaceOccluded)", got[1].Occluded)
+	}
+}
+
+// TestExtractIndexedFaces_ParsesPoseAndQuality confirms
+// FaceRecords[].FaceDetail's Pose/Quality are extracted and folded into the
+// same Score formula ComputeFaceScore exposes directly (see score_test.go
+// for that formula's own dedicated cases, including how the FaceOccluded
+// third input contributes to the score).
+func TestExtractIndexedFaces_ParsesPoseAndQuality(t *testing.T) {
+	faceId := "33333333-3333-3333-3333-333333333333"
+
+	faceRecords := []types.FaceRecord{
+		{
+			Face: &types.Face{
+				FaceId: &faceId,
+				BoundingBox: &types.BoundingBox{
+					Width: aws32(0.2), Height: aws32(0.2), Left: aws32(0.1), Top: aws32(0.1),
+				},
+			},
+			FaceDetail: &types.FaceDetail{
+				Pose: &types.Pose{
+					Yaw:   aws32(10),
+					Pitch: aws32(-5),
+					Roll:  aws32(90), // extreme, but must not affect the score at all
+				},
+				Quality: &types.ImageQuality{
+					Brightness: aws32(80),
+					Sharpness:  aws32(90),
+				},
+			},
+		},
+	}
+
+	got := extractIndexedFaces(faceRecords)
+	if len(got) != 1 {
+		t.Fatalf("extractIndexedFaces() returned %d faces, want 1: %+v", len(got), got)
+	}
+
+	wantPose := FacePose{Yaw: 10, Pitch: -5, Roll: 90}
+	wantQuality := FaceQuality{Brightness: 80, Sharpness: 90}
+	if got[0].Pose != wantPose {
+		t.Errorf("Pose = %+v, want %+v", got[0].Pose, wantPose)
+	}
+	if got[0].Quality != wantQuality {
+		t.Errorf("Quality = %+v, want %+v", got[0].Quality, wantQuality)
+	}
+
+	// FaceDetail didn't include a FaceOccluded, so extractIndexedFaces uses
+	// the zero-value (Value=false, Confidence=0 → neutral 50) — verify the
+	// end-to-end Score matches ComputeFaceScore called with that same input.
+	wantScore := ComputeFaceScore(wantPose, wantQuality, FaceOccluded{})
+	if got[0].Score != wantScore {
+		t.Errorf("Score = %v, want %v (ComputeFaceScore(Pose, Quality, FaceOccluded{}))", got[0].Score, wantScore)
 	}
 }
 

@@ -265,3 +265,6 @@ $RECYCLE.BIN/
 # engine_test.go
 photo_0-0.jpeg
 seflie_sample.jpeg
+*.jpg
+*.png
+output_new_album_v2/*
