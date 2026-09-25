@@ -24,6 +24,7 @@ import (
 type Face interface {
 	IndexFace(ctx context.Context, image []byte, imageID string, eventID string) error
 	SearchAndIndexSelfieFace(ctx context.Context, imageSelfie []byte, eventID string) (string, []string, []byte, error)
+	IndexSelfieFace(ctx context.Context, imageSelfie []byte, eventID string) (string, []byte, error)
 	SearchFacebyFaceId(ctx context.Context, imageSelfieId string, eventID string) ([]string, error)
 	IndexFaceWithBucket(ctx context.Context, s3Bucket string, s3Key string, imageID string, eventID string) error
 	SearchFaceWithBucket(ctx context.Context, s3Bucket string, s3Key string, collectionId string) ([]string, error)
@@ -219,6 +220,18 @@ func encodeJPEG(img image.Image, quality int) ([]byte, error) {
 
 // SearchFace Implementation of SearchFace method in Face interface
 func (r *rekognitionFaceIndexer) SearchAndIndexSelfieFace(ctx context.Context, imageSelfie []byte, collectionId string) (string, []string, []byte, error) {
+	return r.indexSelfieFace(ctx, imageSelfie, collectionId, true)
+}
+
+// IndexSelfieFace indexes a selfie without searching the collection. The search
+// waits a fixed 3s for the index to become searchable and costs two more
+// Rekognition round trips, so callers that only want a face profile skip it.
+func (r *rekognitionFaceIndexer) IndexSelfieFace(ctx context.Context, imageSelfie []byte, collectionId string) (string, []byte, error) {
+	faceId, _, croppedBytes, err := r.indexSelfieFace(ctx, imageSelfie, collectionId, false)
+	return faceId, croppedBytes, err
+}
+
+func (r *rekognitionFaceIndexer) indexSelfieFace(ctx context.Context, imageSelfie []byte, collectionId string, withSearch bool) (string, []string, []byte, error) {
 
 	err := r.createCollectionIfNotExists(ctx, r.client, collectionId)
 	if err != nil {
@@ -280,6 +293,10 @@ func (r *rekognitionFaceIndexer) SearchAndIndexSelfieFace(ctx context.Context, i
 	croppedBytes, encErr := encodeJPEG(croppedImg, 90)
 	if encErr != nil {
 		return faceId, nil, nil, fmt.Errorf("failed to encode cropped face: %v", encErr)
+	}
+
+	if !withSearch {
+		return faceId, nil, croppedBytes, nil
 	}
 
 	externalImageIdResult, err := r.SearchFacebyFaceId(ctx, faceId, collectionId)
