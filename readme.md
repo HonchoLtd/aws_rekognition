@@ -19,3 +19,14 @@ SearchFace(ctx context.Context, imageSelfie []byte, eventID string) ([]string, e
 
 Make sure the eventID is same, or we can't make correct collections.
 
+
+<h3>facev2 package</h3>
+
+```go
+type Face interface {
+    IndexFace(ctx context.Context, image []byte, externalImageId string, collectionId string) ([]IndexedFace, error)
+    IndexFaceWithBucket(ctx context.Context, s3Bucket string, s3Key string, externalImageId string, collectionId string) ([]IndexedFace, error)
+    SearchFacesByFaceId(ctx context.Context, collectionId string, faceId string, opts ...SearchFacesOption) ([]FaceMatch, error)
+}
+```
+Look inside the [facev2 documentation](facev2/README.md)
