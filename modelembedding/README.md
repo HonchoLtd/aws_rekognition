@@ -71,6 +71,16 @@ service role. It is not wrapped by this package.
 
 ## 2. Setup
 
+The module pins Bedrock Runtime and `golang.org/x/image` dependencies in
+`go.mod`; no manual dependency installation is needed after checkout.
+Verify the package without making billed AWS calls:
+
+```bash
+go build ./...
+go test -race ./modelembedding -skip RealBedrock
+go run ./cmd/embeddingsmoketest -h
+```
+
 ```go
 cfg, _ := config.LoadDefaultConfig(ctx, config.WithRegion(modelembedding.DefaultRegion)) // us-east-1
 embedder := modelembedding.NewNovaEmbedder(bedrockruntime.NewFromConfig(cfg))
