@@ -30,3 +30,18 @@ type Face interface {
 }
 ```
 Look inside the [facev2 documentation](facev2/README.md)
+
+<h3>modelembedding package</h3>
+
+Image and text embeddings with Amazon Nova Multimodal Embeddings on Bedrock (us-east-1). Returns vectors; storing and searching them is up to the caller.
+
+```go
+type Embedder interface {
+    EmbedImage(ctx context.Context, image []byte, opts ...EmbedOption) (Embedding, error)
+    EmbedImageWithBucket(ctx context.Context, s3Bucket string, s3Key string, opts ...EmbedOption) (Embedding, error)
+    EmbedText(ctx context.Context, text string, opts ...EmbedOption) (Embedding, error)
+}
+
+func EmbedImages(ctx context.Context, embedder Embedder, items []ImageInput, opts ...BulkOption) []ImageResult
+```
+Look inside the [modelembedding documentation](modelembedding/README.md)
