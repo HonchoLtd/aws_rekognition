@@ -202,6 +202,7 @@ func (r *rekognitionFaceIndexer) IndexFaceWithBucket(ctx context.Context, s3Buck
 		},
 		ExternalImageId:     aws.String(externalImageId),
 		DetectionAttributes: []types.Attribute{types.AttributeFaceOccluded},
+		QualityFilter:       types.QualityFilterHigh,
 	}
 
 	// Call the IndexFaces API
