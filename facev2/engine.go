@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -152,6 +153,7 @@ func (r *rekognitionFaceIndexer) IndexFace(ctx context.Context, imageBytes []byt
 		Image:               &types.Image{Bytes: imageBytes},
 		ExternalImageId:     aws.String(externalImageId),
 		DetectionAttributes: []types.Attribute{types.AttributeFaceOccluded},
+		QualityFilter:       types.QualityFilterHigh,
 	}
 
 	getLogger().Debug("delaying before IndexFaces for collection consistency", "delay_ms", 500)
@@ -171,7 +173,7 @@ func (r *rekognitionFaceIndexer) IndexFace(ctx context.Context, imageBytes []byt
 	indexedFaces := extractIndexedFaces(resp.FaceRecords)
 	getLogger().Info("rekognition api call", "op", "IndexFaces", "collection_id", collectionId, "external_image_id", externalImageId, "duration_ms", duration.Milliseconds(), "faces_found", len(indexedFaces))
 	for _, indexedFace := range indexedFaces {
-		getLogger().Debug("face indexed", "collection_id", collectionId, "external_image_id", externalImageId, "face_id", indexedFace.FaceId, "bounding_box", indexedFace.BoundingBox, "pose", indexedFace.Pose, "quality", indexedFace.Quality, "occluded", indexedFace.Occluded, "score", indexedFace.Score)
+		logIndexedFace(collectionId, externalImageId, indexedFace)
 	}
 
 	return indexedFaces, nil
@@ -200,6 +202,7 @@ func (r *rekognitionFaceIndexer) IndexFaceWithBucket(ctx context.Context, s3Buck
 		},
 		ExternalImageId:     aws.String(externalImageId),
 		DetectionAttributes: []types.Attribute{types.AttributeFaceOccluded},
+		QualityFilter:       types.QualityFilterHigh,
 	}
 
 	// Call the IndexFaces API
@@ -216,10 +219,63 @@ func (r *rekognitionFaceIndexer) IndexFaceWithBucket(ctx context.Context, s3Buck
 	indexedFaces := extractIndexedFaces(resp.FaceRecords)
 	getLogger().Info("rekognition api call", "op", "IndexFaces", "collection_id", collectionId, "external_image_id", externalImageId, "s3_bucket", s3Bucket, "s3_key", s3Key, "duration_ms", duration.Milliseconds(), "faces_found", len(indexedFaces))
 	for _, indexedFace := range indexedFaces {
-		getLogger().Debug("face indexed", "collection_id", collectionId, "external_image_id", externalImageId, "face_id", indexedFace.FaceId, "bounding_box", indexedFace.BoundingBox, "pose", indexedFace.Pose, "quality", indexedFace.Quality, "occluded", indexedFace.Occluded, "score", indexedFace.Score)
+		logIndexedFace(collectionId, externalImageId, indexedFace)
 	}
 
 	return indexedFaces, nil
+}
+
+// logIndexedFace logs a single indexed face's core metadata plus a full
+// score-derivation breakdown — the raw attributes that fed ComputeFaceScore
+// (score.go), the arithmetic performed at each step, and the resulting
+// number — all at Debug level. Shared by IndexFace and IndexFaceWithBucket
+// so both get identical diagnostics.
+//
+// This recomputes the same sub-scores ComputeFaceScore(indexedFace.Pose,
+// indexedFace.Quality, indexedFace.Occluded) already folded into
+// indexedFace.Score, purely so each intermediate value can be shown here —
+// it calls score.go's own exported pieces (poseAxisScore, OccludedScore, the
+// weight constants) rather than re-implementing the formula, so there's
+// still only one source of truth for the math itself.
+func logIndexedFace(collectionId string, externalImageId string, indexedFace IndexedFace) {
+	getLogger().Debug("face indexed", "collection_id", collectionId, "external_image_id", externalImageId, "face_id", indexedFace.FaceId, "bounding_box", indexedFace.BoundingBox, "pose", indexedFace.Pose, "quality", indexedFace.Quality, "occluded", indexedFace.Occluded, "score", indexedFace.Score)
+
+	pose, quality, occluded := indexedFace.Pose, indexedFace.Quality, indexedFace.Occluded
+	yawScore := poseAxisScore(pose.Yaw, MaxYawDegrees)
+	pitchScore := poseAxisScore(pose.Pitch, MaxPitchDegrees)
+	poseScore := min(yawScore, pitchScore)
+	qualityScore := max(0, min(100, BrightnessWeight*quality.Brightness+SharpnessWeight*quality.Sharpness))
+	occludedScore := OccludedScore(occluded)
+
+	poseContribution := PoseScoreWeight * poseScore
+	qualityContribution := QualityScoreWeight * qualityScore
+	occludedContribution := OccludedScoreWeight * occludedScore
+
+	formula := fmt.Sprintf(
+		"score(%.2f) = pose_weight(%.2f)*pose_score(%.2f)[min(yaw_score(%.2f), pitch_score(%.2f))] + quality_weight(%.2f)*quality_score(%.2f)[brightness_weight(%.2f)*%.2f + sharpness_weight(%.2f)*%.2f] + occluded_weight(%.2f)*occluded_score(%.2f)",
+		indexedFace.Score,
+		float32(PoseScoreWeight), poseScore, yawScore, pitchScore,
+		float32(QualityScoreWeight), qualityScore, float32(BrightnessWeight), quality.Brightness, float32(SharpnessWeight), quality.Sharpness,
+		float32(OccludedScoreWeight), occludedScore,
+	)
+
+	getLogger().Debug("face score calculation",
+		"collection_id", collectionId, "external_image_id", externalImageId, "face_id", indexedFace.FaceId,
+		"formula", formula,
+		"yaw", round2(pose.Yaw), "pitch", round2(pose.Pitch), "roll", round2(pose.Roll),
+		"yaw_score", round2(yawScore), "pitch_score", round2(pitchScore), "pose_score", round2(poseScore), "pose_weight", PoseScoreWeight, "pose_contribution", round2(poseContribution),
+		"brightness", round2(quality.Brightness), "sharpness", round2(quality.Sharpness), "quality_score", round2(qualityScore), "quality_weight", QualityScoreWeight, "quality_contribution", round2(qualityContribution),
+		"occluded_value", occluded.Value, "occluded_confidence", round2(occluded.Confidence), "occluded_score", round2(occludedScore), "occluded_weight", OccludedScoreWeight, "occluded_contribution", round2(occludedContribution),
+		"score", round2(indexedFace.Score),
+	)
+}
+
+// round2 rounds a float32 to 2 decimal places and widens it to float64 for
+// logging — float32 values otherwise print with long, meaningless tails
+// (e.g. 73.33333587646484 instead of 73.33) once slog widens them to
+// float64 internally to format them.
+func round2(v float32) float64 {
+	return math.Round(float64(v)*100) / 100
 }
 
 // extractIndexedFaces maps IndexFaces' FaceRecords (resp.FaceRecords[].Face
