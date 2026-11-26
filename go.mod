@@ -5,6 +5,7 @@ go 1.22.1
 require (
 	github.com/aws/aws-sdk-go-v2 v1.32.4
 	github.com/aws/aws-sdk-go-v2/config v1.28.0
+	github.com/aws/aws-sdk-go-v2/service/bedrock v1.22.2
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.20.0
 	github.com/aws/aws-sdk-go-v2/service/rekognition v1.45.2
 	github.com/joho/godotenv v1.5.1
